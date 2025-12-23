@@ -7,8 +7,11 @@ import base64
 import json
 from datetime import datetime
 
+import barberapp_client as client_module
+
 import pytest
 import responses
+from rich.console import Console
 
 
 # =============================================================================
@@ -93,6 +96,57 @@ MOCK_PENDING_RESERVATIONS = [
 ]
 
 
+class DummyConsole:
+    """Simple console stub to capture outputs/inputs in CLI-oriented tests."""
+
+    def __init__(self, inputs=None):
+        self.inputs = list(inputs or [])
+        self.print_calls = []
+        self.clear_called = False
+
+    def clear(self):
+        self.clear_called = True
+
+    def print(self, *args, **kwargs):
+        self.print_calls.append((args, kwargs))
+
+    def input(self, prompt=""):
+        self.print_calls.append(((prompt,), {}))
+        if self.inputs:
+            return self.inputs.pop(0)
+        return ""
+
+
+@pytest.fixture
+def ui_client(mock_client, monkeypatch):
+    """BarberAppClient preloaded with mock data for UI helper tests."""
+    mock_client._services = MOCK_SERVICES
+    mock_client._barbers = MOCK_BARBERS
+    mock_client._schedule = MOCK_SCHEDULE
+    mock_client.get_pending_reservations = lambda: MOCK_PENDING_RESERVATIONS
+    mock_client.get_confirmed_reservations = lambda: MOCK_CONFIRMED_RESERVATIONS
+
+    def fake_request_json(action, *args, **kwargs):
+        if action == "OrariGet":
+            return MOCK_SCHEDULE
+        return []
+
+    mock_client._request_json = fake_request_json
+    monkeypatch.setattr(client_module, "PREFERRED_BARBER", "Giovanni")
+    monkeypatch.setattr(client_module, "PREFERRED_SERVICE_ID", 0)
+    return mock_client
+
+
+@pytest.fixture
+def console_factory(monkeypatch):
+    """Factory that swaps the module console with a dummy instance."""
+    def _factory(inputs=None):
+        dummy = DummyConsole(inputs)
+        monkeypatch.setattr(client_module, "console", dummy)
+        return dummy
+    return _factory
+
+
 class TestEncoding:
     """Tests for encoding/decoding methods."""
     
@@ -131,6 +185,11 @@ class TestEncoding:
         
         result = mock_client._decode(encoded)
         assert result == original
+    
+    def test_decode_restores_missing_padding(self, mock_client):
+        """Test decoding adds padding when needed."""
+        # "a" encoded is "YQ==", trim padding to force branch.
+        assert mock_client._decode("YQ") == "a"
 
 
 class TestPayloadBuilding:
@@ -229,6 +288,20 @@ class TestHelperMethods:
         mock_client._barbers = MOCK_BARBERS
         result = mock_client.get_service_duration("Unknown", 0)
         assert result == 45  # Default fallback
+
+    def test_get_service_duration_fallback_to_default_minutes(self, mock_client):
+        """Test fallback to MinutiTaglio when per-service array is too short."""
+        mock_client._barbers = [
+            {"Nome": "Giovanni", "MinutiTaglio": 50, "MinutiTaglioArr": [30]}
+        ]
+        result = mock_client.get_service_duration("Giovanni", 5)
+        assert result == 50
+
+    def test_get_service_name_handles_missing_data(self, mock_client):
+        """Test graceful handling when services data is malformed."""
+        mock_client._services = {"Nome": None}
+        result = mock_client.get_service_name(0)
+        assert result == ""
 
 
 class TestAvailableSlots:
@@ -505,3 +578,315 @@ class TestAPICalls:
         result = mock_client._request_json("SomeAction")
         
         assert result == []
+
+    @responses.activate
+    def test_request_json_invalid_json(self, mock_client, capsys):
+        """Test handling when API returns invalid JSON payload."""
+        response_data = base64.b64encode(b"not-json").decode()
+        responses.add(
+            responses.POST,
+            mock_client.BASE_URL,
+            body=response_data,
+            status=200
+        )
+
+        result = mock_client._request_json("BrokenAction")
+
+        assert result == []
+        captured = capsys.readouterr()
+        assert "Action: BrokenAction" in captured.out
+        assert "not-json" in captured.out
+    
+    def test_get_last_update_invokes_request(self, mock_client):
+        """Ensure get_last_update delegates to _request with expected args."""
+        called = {}
+        
+        def fake_request(action, *args):
+            called["action"] = action
+            called["args"] = args
+            return "123456"
+        
+        mock_client._request = fake_request
+        
+        result = mock_client.get_last_update()
+        
+        assert result == "123456"
+        assert called == {"action": "LastUpdateGet", "args": ("",)}
+
+
+class TestPublicSearch:
+    """Tests for the unauthenticated search helper."""
+    
+    @responses.activate
+    def test_search_nearby_decodes_payload(self):
+        payload = base64.b64encode(json.dumps([{"Nome": "Test", "Key": "123"}]).encode()).decode()
+        responses.add(
+            responses.POST,
+            client_module.BarberAppClient.BASE_URL,
+            body=payload,
+            status=200
+        )
+        
+        result = client_module.search_nearby(lat=41.9, lon=12.5, radius=5000)
+        
+        assert result[0]["Nome"] == "Test"
+        assert result[0]["Key"] == "123"
+    
+    @responses.activate
+    def test_search_nearby_returns_empty_on_blank_payload(self):
+        responses.add(
+            responses.POST,
+            client_module.BarberAppClient.BASE_URL,
+            body="",
+            status=200
+        )
+        
+        result = client_module.search_nearby(lat=10.0, lon=20.0)
+        assert result == []
+    
+    @responses.activate
+    def test_search_nearby_handles_padding(self):
+        payload = base64.b64encode(json.dumps([{"Nome": "Foo"}]).encode()).decode().rstrip("=")
+        responses.add(
+            responses.POST,
+            client_module.BarberAppClient.BASE_URL,
+            body=payload,
+            status=200
+        )
+        
+        result = client_module.search_nearby(lat=1.0, lon=2.0)
+        assert result[0]["Nome"] == "Foo"
+
+
+class TestTablesAndDashboard:
+    """Tests for dashboard helper tables and rendering."""
+    
+    def test_get_services_table_has_rows(self, ui_client):
+        table = client_module.get_services_table(ui_client)
+        assert len(table.rows) > 0
+    
+    def test_get_barbers_table_filters_hidden(self, ui_client):
+        table = client_module.get_barbers_table(ui_client)
+        record_console = Console(record=True)
+        record_console.print(table)
+        rendered = record_console.export_text()
+        assert "Hidden" not in rendered
+        assert "Giovanni" in rendered
+    
+    def test_get_reservations_table_combines_pending_and_confirmed(self, ui_client):
+        table = client_module.get_reservations_table(ui_client)
+        record_console = Console(record=True)
+        record_console.print(table)
+        rendered = record_console.export_text()
+        assert "⏳" in rendered
+        assert "✅" in rendered
+    
+    def test_get_services_table_handles_exception(self, ui_client):
+        ui_client.get_services = lambda: {"Nome": None, "Prezzo": []}
+        table = client_module.get_services_table(ui_client)
+        assert len(table.rows) == 0  # returns empty safe table without raising
+    
+    def test_get_reservations_table_handles_empty_state(self, ui_client):
+        ui_client.get_pending_reservations = lambda: []
+        ui_client.get_confirmed_reservations = lambda: []
+        table = client_module.get_reservations_table(ui_client)
+        record_console = Console(record=True)
+        record_console.print(table)
+        rendered = record_console.export_text()
+        assert "Nessuna" in rendered
+    
+    def test_get_slots_table_shows_available_periods(self, ui_client):
+        table = client_module.get_slots_table(ui_client, "Giovanni", 0)
+        assert len(table.rows) > 0
+    
+    def test_get_slots_table_handles_no_days(self, ui_client):
+        ui_client.get_available_slots_for_barber = lambda barber: []
+        table = client_module.get_slots_table(ui_client, "Giovanni", 0)
+        record_console = Console(record=True)
+        record_console.print(table)
+        rendered = record_console.export_text()
+        assert "Nessun giorno" in rendered
+    
+    def test_get_slots_table_marks_occupied_days(self, ui_client):
+        ui_client.get_available_slots_for_barber = lambda barber: [
+            {"Gi": "231225", "Pa": barber, "Fe": False}
+        ]
+        ui_client.calculate_available_slots = lambda *args, **kwargs: []
+        table = client_module.get_slots_table(ui_client, "Giovanni", 0)
+        record_console = Console(record=True)
+        record_console.print(table)
+        rendered = record_console.export_text()
+        assert "Occupato" in rendered
+    
+    def test_show_dashboard_renders_panels(self, ui_client, console_factory):
+        dummy_console = console_factory()
+        ui_client.get_service_name = lambda _: None  # trigger fallback
+        client_module.show_dashboard(ui_client, selected_service_id=0)
+        assert dummy_console.clear_called
+        assert dummy_console.print_calls  # Something was rendered
+
+
+class TestInteractiveFlows:
+    """Tests covering interactive helper functions."""
+    
+    def test_select_service_valid_input(self, ui_client, console_factory):
+        console_factory(inputs=["2"])
+        result = client_module.select_service(ui_client, current_service_id=0)
+        assert result == 2
+    
+    def test_select_service_invalid_id_keeps_current(self, ui_client, console_factory):
+        console_factory(inputs=["99"])
+        result = client_module.select_service(ui_client, current_service_id=3)
+        assert result == 3
+    
+    def test_select_service_handles_value_error(self, ui_client, console_factory):
+        console_factory(inputs=["abc"])
+        result = client_module.select_service(ui_client, current_service_id=4)
+        assert result == 4
+    
+    def test_book_appointment_success_flow(self, ui_client, console_factory):
+        # Inputs: keep service, choose first day (0), first slot (0), confirm booking.
+        console_factory(inputs=["n", "0", "0", "s"])
+
+        class BookingSpy:
+            def __init__(self):
+                self.called = False
+                self.args = None
+
+            def __call__(self, dt_str, service_id, barber):
+                self.called = True
+                self.args = (dt_str, service_id, barber)
+                return True
+
+        spy = BookingSpy()
+        ui_client.book = spy
+        
+        result = client_module.book_appointment(ui_client, current_service_id=0)
+        
+        assert result == 0
+        assert spy.called
+        dt_str, service_id, barber = spy.args
+        assert service_id == 0
+        assert barber == client_module.PREFERRED_BARBER
+        assert dt_str.endswith("1115")  # first slot in mock data
+        assert ui_client._schedule is None  # cache cleared after booking
+    
+    def test_book_appointment_no_available_days(self, ui_client, console_factory):
+        console_factory(inputs=["s", "999"])
+        ui_client.get_available_slots_for_barber = lambda barber: []
+        
+        result = client_module.book_appointment(ui_client, current_service_id=0)
+        
+        assert result == 0
+    
+    def test_book_appointment_invalid_day_selection(self, ui_client, console_factory):
+        console_factory(inputs=["n", "5"])
+        result = client_module.book_appointment(ui_client, current_service_id=0)
+        assert result == 0
+    
+    def test_book_appointment_invalid_slot_selection(self, ui_client, console_factory):
+        console_factory(inputs=["n", "0", "99"])
+        result = client_module.book_appointment(ui_client, current_service_id=0)
+        assert result == 0
+    
+    def test_book_appointment_user_declines_confirmation(self, ui_client, console_factory):
+        console_factory(inputs=["n", "0", "0", "n"])
+        result = client_module.book_appointment(ui_client, current_service_id=0)
+        assert result == 0
+    
+    def test_book_appointment_handles_booking_failure(self, ui_client, console_factory):
+        console_factory(inputs=["n", "0", "0", "s"])
+        ui_client.book = lambda *args, **kwargs: False
+        result = client_module.book_appointment(ui_client, current_service_id=0)
+        assert result == 0
+    
+    def test_cancel_appointment_success_flow(self, ui_client, console_factory):
+        console_factory(inputs=["0", "s"])
+        canceled = {}
+        
+        def fake_cancel(dt, service_id, barber, price):
+            canceled["dt"] = dt
+            canceled["service_id"] = service_id
+            canceled["barber"] = barber
+            canceled["price"] = price
+            return True
+        
+        ui_client.cancel = fake_cancel
+        
+        client_module.cancel_appointment(ui_client)
+        
+        assert canceled["service_id"] == 0
+        assert canceled["barber"] == "Giovanni"
+    
+    def test_cancel_appointment_no_confirmed(self, ui_client, console_factory):
+        console_factory(inputs=[])
+        ui_client.get_confirmed_reservations = lambda: []
+        client_module.cancel_appointment(ui_client)
+    
+    def test_cancel_appointment_invalid_selection(self, ui_client, console_factory):
+        console_factory(inputs=["5"])
+        client_module.cancel_appointment(ui_client)
+    
+    def test_cancel_appointment_user_declines(self, ui_client, console_factory):
+        console_factory(inputs=["0", "n"])
+        client_module.cancel_appointment(ui_client)
+    
+    def test_cancel_appointment_failure(self, ui_client, console_factory):
+        console_factory(inputs=["0", "s"])
+        ui_client.cancel = lambda *args, **kwargs: False
+        client_module.cancel_appointment(ui_client)
+    
+    def test_interactive_menu_quits_immediately(self, ui_client, console_factory):
+        console_factory(inputs=["q"])
+        client_module.interactive_menu(ui_client)
+    
+    def test_interactive_menu_handles_all_commands(self, ui_client, console_factory, monkeypatch):
+        dummy_console = console_factory(inputs=["s", "", "b", "", "c", "", "r", "x", "q"])
+        
+        show_calls = []
+        monkeypatch.setattr(client_module, "show_dashboard", lambda client, sid: show_calls.append(("show", sid)))
+        monkeypatch.setattr(client_module, "select_service", lambda client, sid: sid + 1)
+        
+        def fake_book(client, sid):
+            return sid + 2
+        
+        monkeypatch.setattr(client_module, "book_appointment", fake_book)
+        canceled = {}
+        monkeypatch.setattr(client_module, "cancel_appointment", lambda client: canceled.update({"called": True}))
+        
+        ui_client._barbers = ["cached"]
+        ui_client._services = ["cached"]
+        ui_client._schedule = ["cached"]
+        
+        client_module.interactive_menu(ui_client)
+        
+        assert show_calls  # dashboard rendered multiple times
+        assert canceled.get("called") is True
+        assert ui_client._barbers is None
+        assert ui_client._services is None
+        assert ui_client._schedule is None
+
+
+class TestMainEntry:
+    def test_main_invokes_interactive_menu(self, monkeypatch):
+        created_client = {}
+        
+        class FakeClient:
+            pass
+        
+        def fake_ctor(*args, **kwargs):
+            created_client["args"] = args
+            created_client["kwargs"] = kwargs
+            return FakeClient()
+        
+        invoked = {}
+        
+        def fake_menu(client):
+            invoked["client"] = client
+        
+        monkeypatch.setattr(client_module, "BarberAppClient", fake_ctor)
+        monkeypatch.setattr(client_module, "interactive_menu", fake_menu)
+        
+        client_module.main()
+        
+        assert "client" in invoked
