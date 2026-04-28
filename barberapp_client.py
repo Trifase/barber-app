@@ -175,20 +175,30 @@ class BarberAppClient:
         if self._services is None:
             self._services = self._request_json("ServiziAppFlutter", "")
         return self._services
-    
+   
     def get_pending_reservations(self) -> dict | list:
         """Ottiene prenotazioni in coda (non confermate)"""
-        return self._request_json(
-            "PrenotazioniSospeseMobileGet",
-            self.username, "", "", "", "", "", "", ""
-        )
+        try:
+            return self._request_json(
+                "PrenotazioniSospeseMobileGet",
+                self.username, "", "", "", "", "", "", ""
+            )
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 400:
+                return []
+            raise
     
     def get_confirmed_reservations(self) -> dict | list:
         """Ottiene prenotazioni confermate"""
-        return self._request_json(
-            "PrenotazioniMobileGet",
-            self.username, "", "", "", "", "", "", ""
-        )
+        try:
+            return self._request_json(
+                "PrenotazioniMobileGet",
+                self.username, "", "", "", "", "", "", ""
+            )
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 400:
+                return []
+            raise
     
     def get_schedule(self) -> dict | list:
         """Ottiene slot disponibili per tutti i barbieri"""
