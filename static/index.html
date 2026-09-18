@@ -231,26 +231,61 @@
                 <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Dalle ore</label>
                 <select id="sched-min-hour" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm">
                   <option value="">Qualsiasi</option>
-                  <option value="8">08:00</option>
-                  <option value="9">09:00</option>
-                  <option value="10">10:00</option>
-                  <option value="11">11:00</option>
-                  <option value="12">12:00</option>
-                  <option value="15">15:00</option>
-                  <option value="16">16:00</option>
-                  <option value="17">17:00</option>
-                  <option value="18">18:00</option>
-                  <option value="19" selected>19:00</option>
+                  <option value="08:00">08:00</option>
+                  <option value="08:30">08:30</option>
+                  <option value="09:00">09:00</option>
+                  <option value="09:30">09:30</option>
+                  <option value="10:00">10:00</option>
+                  <option value="10:30">10:30</option>
+                  <option value="11:00">11:00</option>
+                  <option value="11:30">11:30</option>
+                  <option value="12:00">12:00</option>
+                  <option value="12:30">12:30</option>
+                  <option value="13:00">13:00</option>
+                  <option value="15:00">15:00</option>
+                  <option value="15:30">15:30</option>
+                  <option value="16:00">16:00</option>
+                  <option value="16:30">16:30</option>
+                  <option value="17:00">17:00</option>
+                  <option value="17:30">17:30</option>
+                  <option value="18:00">18:00</option>
+                  <option value="18:30">18:30</option>
+                  <option value="19:00" selected>19:00</option>
+                  <option value="19:30">19:30</option>
+                  <option value="20:00">20:00</option>
+                  <option value="20:30">20:30</option>
+                  <option value="21:00">21:00</option>
+                  <option value="21:30">21:30</option>
+                  <option value="22:00">22:00</option>
                 </select>
               </div>
               <div>
                 <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Fino alle ore</label>
                 <select id="sched-max-hour" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm">
                   <option value="">Chiusura</option>
-                  <option value="13">13:00</option>
-                  <option value="18">18:00</option>
-                  <option value="19">19:00</option>
-                  <option value="20" selected>20:00</option>
+                  <option value="12:00">12:00</option>
+                  <option value="12:30">12:30</option>
+                  <option value="13:00">13:00</option>
+                  <option value="13:30">13:30</option>
+                  <option value="15:00">15:00</option>
+                  <option value="15:30">15:30</option>
+                  <option value="16:00">16:00</option>
+                  <option value="16:30">16:30</option>
+                  <option value="17:00">17:00</option>
+                  <option value="17:30">17:30</option>
+                  <option value="18:00">18:00</option>
+                  <option value="18:30">18:30</option>
+                  <option value="19:00">19:00</option>
+                  <option value="19:30">19:30</option>
+                  <option value="20:00" selected>20:00</option>
+                  <option value="20:30">20:30</option>
+                  <option value="21:00">21:00</option>
+                  <option value="21:30">21:30</option>
+                  <option value="22:00">22:00</option>
+                  <option value="22:30">22:30</option>
+                  <option value="23:00">23:00</option>
+                  <option value="23:30">23:30</option>
+                  <option value="24:00">24:00</option>
                 </select>
               </div>
             </div>
@@ -873,8 +908,8 @@
         // Start
         const barber = document.getElementById('sched-barber').value;
         const serviceId = parseInt(document.getElementById('sched-service').value);
-        const minH = document.getElementById('sched-min-hour').value ? parseInt(document.getElementById('sched-min-hour').value) : null;
-        const maxH = document.getElementById('sched-max-hour').value ? parseInt(document.getElementById('sched-max-hour').value) : null;
+        const minH = document.getElementById('sched-min-hour').value || null;
+        const maxH = document.getElementById('sched-max-hour').value || null;
         const interval = parseInt(document.getElementById('sched-interval').value);
         const startD = document.getElementById('sched-start-date').value || null;
         const endD = document.getElementById('sched-end-date').value || null;

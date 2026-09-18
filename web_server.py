@@ -44,8 +44,8 @@ class SchedulerStartRequest(BaseModel):
     barber: str | None = None
     service_id: int | None = None
     interval_minutes: int = 10
-    min_hour: int | None = None
-    max_hour: int | None = None
+    min_hour: str | int | float | None = None
+    max_hour: str | int | float | None = None
     start_date: str | None = None
     end_date: str | None = None
     dry_run: bool = False

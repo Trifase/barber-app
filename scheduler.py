@@ -35,7 +35,22 @@ def send_telegram(message: str) -> bool:
         return resp.status_code == 200
     except Exception as e:
         print(f"[Telegram Error] {e}")
-        return False
+def _parse_time_to_minutes(val: str | int | float | None) -> int | None:
+    """Converte un valore orario (es. 18, '18', '18:30', '24:00') in minuti da mezzanotte."""
+    if val is None or val == "":
+        return None
+    if isinstance(val, (int, float)):
+        return int(val * 60)
+    val_str = str(val).strip()
+    if not val_str:
+        return None
+    if ":" in val_str:
+        parts = val_str.split(":")
+        return int(parts[0]) * 60 + int(parts[1])
+    try:
+        return int(val_str) * 60
+    except ValueError:
+        return None
 
 
 class AutoBookScheduler:
@@ -159,8 +174,8 @@ class AutoBookScheduler:
         barber = self.config_data["barber"]
         service_id = self.config_data["service_id"]
         interval_secs = self.config_data["interval_minutes"] * 60
-        min_h = self.config_data["min_hour"]
-        max_h = self.config_data["max_hour"]
+        min_mins = _parse_time_to_minutes(self.config_data["min_hour"])
+        max_mins = _parse_time_to_minutes(self.config_data["max_hour"])
         dry_run = self.config_data["dry_run"]
 
         start_d: datetime_date | None = None
@@ -207,10 +222,11 @@ class AutoBookScheduler:
 
                     slots = client.calculate_available_slots(date_str, barber, service_id)
                     for time_str, slot_duration in slots:
-                        hour = int(time_str.split(":")[0])
-                        if min_h is not None and hour < min_h:
+                        parts = time_str.split(":")
+                        slot_mins = int(parts[0]) * 60 + int(parts[1])
+                        if min_mins is not None and slot_mins < min_mins:
                             continue
-                        if max_h is not None and hour >= max_h:
+                        if max_mins is not None and slot_mins >= max_mins:
                             continue
 
                         # Trovato!

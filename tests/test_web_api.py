@@ -136,3 +136,29 @@ def test_scheduler_lifecycle():
 
     final_status = client.get("/api/scheduler/status")
     assert final_status.json()["status"] == "stopped"
+
+
+def test_scheduler_string_time_intervals():
+    scheduler.stop()
+    start_payload = {
+        "barber": "Giovanni",
+        "service_id": 0,
+        "interval_minutes": 15,
+        "min_hour": "18:30",
+        "max_hour": "24:00",
+        "dry_run": True
+    }
+    start_res = client.post("/api/scheduler/start", json=start_payload)
+    assert start_res.status_code == 200
+    assert start_res.json()["success"] is True
+
+    status_res = client.get("/api/scheduler/status")
+    data = status_res.json()
+    assert data["status"] == "running"
+    assert data["config"]["min_hour"] == "18:30"
+    assert data["config"]["max_hour"] == "24:00"
+
+    stop_res = client.post("/api/scheduler/stop")
+    assert stop_res.status_code == 200
+    assert stop_res.json()["success"] is True
+
