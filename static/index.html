@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BarberApp • Gestione Prenotazioni & Auto-Booking</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              200: '#fde68a',
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309',
+              800: '#92400e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #fafaf9;
+      color: #1c1917;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- TOP HEADER -->
+  <header class="bg-white border-b border-stone-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-xl shadow-sm">
+          ✂️
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-stone-900 leading-tight">BarberApp Web Client</h1>
+          <p class="text-xs text-stone-500 flex items-center gap-2">
+            <span>Cliente: <strong id="header-user" class="text-stone-700">Caricamento...</strong></span>
+            <span>•</span>
+            <span id="header-telegram-badge" class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-600">
+              Telegram: ...
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <!-- TABS NAVIGATION -->
+      <nav class="flex bg-stone-100 p-1 rounded-xl border border-stone-200 text-sm font-medium">
+        <button onclick="switchTab('tab-reservations')" id="nav-reservations" class="tab-btn px-4 py-1.5 rounded-lg transition-all text-stone-600 hover:text-stone-900">
+          📌 Mie Prenotazioni <span id="badge-res-count" class="ml-1 text-xs bg-stone-200 text-stone-700 px-1.5 py-0.5 rounded-full hidden">0</span>
+        </button>
+        <button onclick="switchTab('tab-slots')" id="nav-slots" class="tab-btn px-4 py-1.5 rounded-lg transition-all text-stone-600 hover:text-stone-900">
+          🕐 Cerca & Prenota
+        </button>
+        <button onclick="switchTab('tab-scheduler')" id="nav-scheduler" class="tab-btn px-4 py-1.5 rounded-lg transition-all text-stone-600 hover:text-stone-900 flex items-center gap-1.5">
+          <span id="scheduler-pulse" class="w-2 h-2 rounded-full bg-stone-400"></span>
+          🤖 Auto-Booking Bot
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6">
+
+    <!-- ALERT BANNER -->
+    <div id="global-alert" class="hidden mb-6 p-4 rounded-xl text-sm border shadow-sm transition-all"></div>
+
+    <!-- ======================================================== -->
+    <!-- TAB 1: MIE PRENOTAZIONI -->
+    <!-- ======================================================== -->
+    <section id="tab-reservations" class="tab-content">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-stone-900">Prenotazioni Attive</h2>
+          <p class="text-sm text-stone-500">Visualizza o annulla i tuoi appuntamenti confermati e in lista d'attesa.</p>
+        </div>
+        <button onclick="loadReservations()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-stone-200 text-sm font-medium text-stone-700 hover:bg-stone-50 shadow-sm transition">
+          🔄 Aggiorna
+        </button>
+      </div>
+
+      <!-- CONFIRMED LIST -->
+      <div class="mb-8">
+        <h3 class="text-sm font-bold uppercase tracking-wider text-stone-500 mb-3 flex items-center gap-2">
+          <span>Confermate</span>
+          <span id="confirmed-badge" class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-semibold">0</span>
+        </h3>
+        <div id="confirmed-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="col-span-full py-12 text-center bg-white rounded-2xl border border-stone-200 text-stone-400 text-sm">
+            Nessuna prenotazione attiva.
+          </div>
+        </div>
+      </div>
+
+      <!-- PENDING LIST -->
+      <div id="pending-section" class="hidden">
+        <h3 class="text-sm font-bold uppercase tracking-wider text-stone-500 mb-3 flex items-center gap-2">
+          <span>In Coda / In Sospeso</span>
+          <span id="pending-badge" class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-semibold">0</span>
+        </h3>
+        <div id="pending-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      </div>
+    </section>
+
+
+    <!-- ======================================================== -->
+    <!-- TAB 2: CERCA & PRENOTA SLOT -->
+    <!-- ======================================================== -->
+    <section id="tab-slots" class="tab-content hidden">
+      <div class="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm mb-6">
+        <h2 class="text-lg font-bold text-stone-900 mb-1">Cerca Orari Liberi</h2>
+        <p class="text-sm text-stone-500 mb-4">Seleziona barbiere, servizio e periodo per trovare lo slot ideale.</p>
+
+        <form id="slots-form" onsubmit="event.preventDefault(); searchSlots();" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Barbiere -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1.5">Barbiere</label>
+            <select id="slots-barber" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"></select>
+          </div>
+
+          <!-- Servizio -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1.5">Servizio</label>
+            <select id="slots-service" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"></select>
+          </div>
+
+          <!-- Periodo -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1.5">Periodo</label>
+            <select id="slots-preset" onchange="toggleCustomDates()" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none">
+              <option value="all">Tutti i giorni disponibili</option>
+              <option value="today">Oggi</option>
+              <option value="tomorrow">Domani</option>
+              <option value="this-week">Questa settimana</option>
+              <option value="next-week" selected>Prossima settimana</option>
+              <option value="custom">Data specifica / Range</option>
+            </select>
+          </div>
+
+          <!-- Fascia Oraria -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1.5">Fascia Oraria</label>
+            <select id="slots-time-filter" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none">
+              <option value="">Tutte le ore</option>
+              <option value="morning">Mattina (8:30 - 13:00)</option>
+              <option value="afternoon">Pomeriggio (15:00 - 18:00)</option>
+              <option value="evening">Sera (18:00 - 20:00)</option>
+              <option value="after-19">Tardi: Dopo le 19:00</option>
+            </select>
+          </div>
+
+          <!-- Custom Dates Row -->
+          <div id="custom-dates-row" class="col-span-full hidden grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-stone-100">
+            <div>
+              <label class="block text-xs font-semibold text-stone-600 mb-1">Data Inizio</label>
+              <input type="date" id="slots-start-date" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-stone-600 mb-1">Data Fine</label>
+              <input type="date" id="slots-end-date" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+          </div>
+
+          <!-- Submit CTA -->
+          <div class="col-span-full flex justify-end gap-3 mt-2">
+            <button type="submit" id="btn-search-slots" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-xl shadow-sm transition flex items-center gap-2 text-sm">
+              <span>🔍 Cerca Slot Disponibili</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- RESULTS SECTION -->
+      <div id="slots-results-container">
+        <div id="slots-loading" class="hidden py-12 text-center text-stone-500 text-sm">
+          <div class="inline-block animate-spin text-2xl mb-2">⏳</div>
+          <p>Interrogazione orari in corso...</p>
+        </div>
+        <div id="slots-results" class="space-y-6"></div>
+      </div>
+    </section>
+
+
+    <!-- ======================================================== -->
+    <!-- TAB 3: AUTO-BOOKING BOT SCHEDULER -->
+    <!-- ======================================================== -->
+    <section id="tab-scheduler" class="tab-content hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- CONFIGURATION CARD -->
+        <div class="lg:col-span-1 bg-white p-5 rounded-2xl border border-stone-200 shadow-sm">
+          <h2 class="text-lg font-bold text-stone-900 mb-1">Configura Bot</h2>
+          <p class="text-xs text-stone-500 mb-4 leading-relaxed">
+            Il monitor continuerà a verificare gli slot in background. Appena ne compare uno che rispetta le tue condizioni, effettuerà la prenotazione e ti manderà un messaggio su Telegram.
+          </p>
+
+          <form id="scheduler-form" onsubmit="event.preventDefault(); toggleScheduler();" class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Barbiere</label>
+              <select id="sched-barber" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm"></select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Servizio</label>
+              <select id="sched-service" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm"></select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Dalle ore</label>
+                <select id="sched-min-hour" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm">
+                  <option value="">Qualsiasi</option>
+                  <option value="8">08:00</option>
+                  <option value="9">09:00</option>
+                  <option value="10">10:00</option>
+                  <option value="11">11:00</option>
+                  <option value="12">12:00</option>
+                  <option value="15">15:00</option>
+                  <option value="16">16:00</option>
+                  <option value="17">17:00</option>
+                  <option value="18">18:00</option>
+                  <option value="19" selected>19:00</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Fino alle ore</label>
+                <select id="sched-max-hour" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm">
+                  <option value="">Chiusura</option>
+                  <option value="13">13:00</option>
+                  <option value="18">18:00</option>
+                  <option value="19">19:00</option>
+                  <option value="20" selected>20:00</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Frequenza controllo</label>
+              <select id="sched-interval" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm">
+                <option value="2">Ogni 2 minuti (Intensivo)</option>
+                <option value="5">Ogni 5 minuti</option>
+                <option value="10" selected>Ogni 10 minuti (Consigliato)</option>
+                <option value="15">Ogni 15 minuti</option>
+                <option value="30">Ogni 30 minuti</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-stone-600 mb-1">Da data (opzionale)</label>
+                <input type="date" id="sched-start-date" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-stone-600 mb-1">A data (opzionale)</label>
+                <input type="date" id="sched-end-date" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs">
+              </div>
+            </div>
+
+            <div class="pt-1">
+              <label class="flex items-center gap-2 cursor-pointer text-xs text-stone-700 font-medium">
+                <input type="checkbox" id="sched-dry-run" class="rounded border-stone-300 text-amber-600 focus:ring-amber-500 w-4 h-4">
+                <span>Modalità Dry-Run (notifica Telegram senza prenotare)</span>
+              </label>
+            </div>
+
+            <div class="pt-3">
+              <button type="submit" id="btn-toggle-scheduler" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-sm">
+                🚀 Avvia Monitoraggio
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- STATUS & ACTIVITY LOG -->
+        <div class="lg:col-span-2 space-y-6">
+
+          <!-- STATUS OVERVIEW -->
+          <div class="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2.5 mb-1">
+                <span id="sched-status-pill" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-stone-100 text-stone-600">
+                  <span class="w-2 h-2 rounded-full bg-stone-400"></span> INATTIVO
+                </span>
+                <span id="sched-checks-pill" class="text-xs text-stone-500 font-medium">0 controlli eseguiti</span>
+              </div>
+              <p class="text-xs text-stone-500">
+                Ultimo controllo: <strong id="sched-last-check" class="text-stone-700">Mai</strong> • 
+                Prossimo: <strong id="sched-next-check" class="text-stone-700">-</strong>
+              </p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button onclick="pollSchedulerStatus()" class="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-lg text-xs font-medium text-stone-700 transition">
+                🔄 Aggiorna Log
+              </button>
+            </div>
+          </div>
+
+          <!-- LOG FEED -->
+          <div class="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm flex flex-col h-[400px]">
+            <h3 class="text-sm font-bold text-stone-800 mb-3 flex items-center justify-between">
+              <span>📋 Registro Attività Bot</span>
+              <span class="text-xs font-normal text-stone-400">Ultimi 100 eventi</span>
+            </h3>
+
+            <div id="sched-log-container" class="flex-1 overflow-y-auto custom-scrollbar font-mono text-xs space-y-1.5 p-3 bg-stone-50 rounded-xl border border-stone-200">
+              <div class="text-stone-400 italic">Nessuna attività registrata.</div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ======================================================== -->
+  <!-- MODAL CONFERMA PRENOTAZIONE -->
+  <!-- ======================================================== -->
+  <div id="book-modal" class="fixed inset-0 bg-stone-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-stone-200 transform transition-all">
+      <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center text-2xl mb-4">
+        📅
+      </div>
+      <h3 class="text-lg font-bold text-stone-900 mb-1">Confermi la prenotazione?</h3>
+      <p class="text-xs text-stone-500 mb-4">Verifica i dati del tuo appuntamento prima di procedere.</p>
+
+      <div class="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-2.5 text-sm mb-6">
+        <div class="flex justify-between">
+          <span class="text-stone-500">Data e Ora:</span>
+          <strong id="modal-datetime" class="text-stone-800">-</strong>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-stone-500">Barbiere:</span>
+          <strong id="modal-barber" class="text-stone-800">-</strong>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-stone-500">Servizio:</span>
+          <strong id="modal-service" class="text-stone-800">-</strong>
+        </div>
+        <div class="flex justify-between pt-2 border-t border-stone-200">
+          <span class="text-stone-500">Prezzo:</span>
+          <strong id="modal-price" class="text-emerald-700">-</strong>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button onclick="closeBookModal()" class="flex-1 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-xl text-sm transition">
+          Annulla
+        </button>
+        <button onclick="executeBooking()" id="btn-confirm-booking" class="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-sm shadow-sm transition">
+          Conferma & Prenota
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL CONFERMA CANCELLAZIONE -->
+  <!-- ======================================================== -->
+  <div id="cancel-modal" class="fixed inset-0 bg-stone-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-stone-200 transform transition-all">
+      <div class="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center text-2xl mb-4">
+        ⚠️
+      </div>
+      <h3 class="text-lg font-bold text-stone-900 mb-1">Annulla Prenotazione</h3>
+      <p class="text-xs text-stone-500 mb-4">Sei sicuro di voler cancellare questo appuntamento?</p>
+
+      <div id="cancel-details" class="bg-stone-50 p-4 rounded-xl border border-stone-200 text-sm mb-6">
+        <!-- Dettagli inseriti dinamicamente -->
+      </div>
+
+      <div class="flex gap-3">
+        <button onclick="closeCancelModal()" class="flex-1 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-xl text-sm transition">
+          No, Mantieni
+        </button>
+        <button onclick="executeCancellation()" id="btn-confirm-cancel" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-sm shadow-sm transition">
+          Sì, Cancella
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- APPLICATION JAVASCRIPT -->
+  <!-- ======================================================== -->
+  <script>
+    let appState = {
+      systemStatus: null,
+      barbers: [],
+      services: [],
+      reservations: { confirmed: [], pending: [] },
+      selectedSlotForBooking: null,
+      selectedReservationForCancel: null,
+      schedulerPollingInterval: null
+    };
+
+    // --- INIT ---
+    window.addEventListener('DOMContentLoaded', async () => {
+      switchTab('tab-reservations');
+      await loadSystemStatus();
+      await loadBarbers();
+      await loadServices();
+      await loadReservations();
+      await pollSchedulerStatus();
+
+      // Poll scheduler logs every 6s
+      setInterval(pollSchedulerStatus, 6000);
+    });
+
+    // --- TABS ---
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('bg-white', 'text-stone-900', 'shadow-sm');
+        el.classList.add('text-stone-600');
+      });
+
+      const activeSection = document.getElementById(tabId);
+      if (activeSection) activeSection.classList.remove('hidden');
+
+      const activeBtnId = tabId === 'tab-reservations' ? 'nav-reservations' : (tabId === 'tab-slots' ? 'nav-slots' : 'nav-scheduler');
+      const activeBtn = document.getElementById(activeBtnId);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-white', 'text-stone-900', 'shadow-sm');
+        activeBtn.classList.remove('text-stone-600');
+      }
+
+      if (tabId === 'tab-slots' && document.getElementById('slots-results').children.length === 0) {
+        searchSlots();
+      }
+    }
+
+    // --- ALERTS ---
+    function showAlert(message, type = 'success') {
+      const banner = document.getElementById('global-alert');
+      banner.className = `mb-6 p-4 rounded-xl text-sm border shadow-sm transition-all ${
+        type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+        type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' :
+        'bg-amber-50 border-amber-200 text-amber-800'
+      }`;
+      banner.innerHTML = message;
+      banner.classList.remove('hidden');
+      setTimeout(() => banner.classList.add('hidden'), 6000);
+    }
+
+    // --- API CALLS ---
+    async function loadSystemStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        appState.systemStatus = data;
+
+        document.getElementById('header-user').textContent = data.username;
+        const tgBadge = document.getElementById('header-telegram-badge');
+        if (data.telegram_configured) {
+          tgBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800';
+          tgBadge.textContent = 'Telegram: Attivo';
+        } else {
+          tgBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-stone-200 text-stone-600';
+          tgBadge.textContent = 'Telegram: Non configurato';
+        }
+      } catch (err) {
+        console.error("Error loading status:", err);
+      }
+    }
+
+    async function loadBarbers() {
+      try {
+        const res = await fetch('/api/barbers');
+        const data = await res.json();
+        appState.barbers = data;
+
+        const selectSlots = document.getElementById('slots-barber');
+        const selectSched = document.getElementById('sched-barber');
+        selectSlots.innerHTML = '';
+        selectSched.innerHTML = '';
+
+        data.forEach(b => {
+          const isPref = b.nome === appState.systemStatus?.preferred_barber;
+          const opt1 = new Option(b.nome + (isPref ? ' (Preferito)' : ''), b.nome, false, isPref);
+          const opt2 = new Option(b.nome + (isPref ? ' (Preferito)' : ''), b.nome, false, isPref);
+          selectSlots.add(opt1);
+          selectSched.add(opt2);
+        });
+      } catch (err) {
+        console.error("Error loading barbers:", err);
+      }
+    }
+
+    async function loadServices() {
+      try {
+        const res = await fetch('/api/services');
+        const data = await res.json();
+        appState.services = data;
+
+        const selectSlots = document.getElementById('slots-service');
+        const selectSched = document.getElementById('sched-service');
+        selectSlots.innerHTML = '';
+        selectSched.innerHTML = '';
+
+        data.forEach(s => {
+          const isPref = s.id === appState.systemStatus?.preferred_service_id;
+          const label = `[${s.id}] ${s.name} (${s.price.toFixed(0)} €, ${s.duration}m)${isPref ? ' ⭐' : ''}`;
+          const opt1 = new Option(label, s.id, false, isPref);
+          const opt2 = new Option(label, s.id, false, isPref);
+          selectSlots.add(opt1);
+          selectSched.add(opt2);
+        });
+      } catch (err) {
+        console.error("Error loading services:", err);
+      }
+    }
+
+    async function loadReservations() {
+      try {
+        const res = await fetch('/api/reservations');
+        const data = await res.json();
+        appState.reservations = data;
+
+        const confList = document.getElementById('confirmed-list');
+        const confBadge = document.getElementById('confirmed-badge');
+        const totalBadge = document.getElementById('badge-res-count');
+
+        const confirmed = data.confirmed || [];
+        confBadge.textContent = confirmed.length;
+        if (confirmed.length > 0) {
+          totalBadge.textContent = confirmed.length;
+          totalBadge.classList.remove('hidden');
+        } else {
+          totalBadge.classList.add('hidden');
+        }
+
+        if (confirmed.length === 0) {
+          confList.innerHTML = `
+            <div class="col-span-full py-12 text-center bg-white rounded-2xl border border-stone-200 text-stone-400 text-sm">
+              Nessuna prenotazione attiva. Cerca uno slot per prenotare!
+            </div>
+          `;
+        } else {
+          confList.innerHTML = confirmed.map(r => `
+            <div class="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-3">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Confermato
+                  </span>
+                  <span class="text-xs font-mono text-stone-400">${r.datetime_str}</span>
+                </div>
+                <div class="text-xl font-bold text-stone-900 mb-1">
+                  ${r.day_name} ${r.date} <span class="text-amber-600">ore ${r.time}</span>
+                </div>
+                <p class="text-sm text-stone-600 mb-1">Barbiere: <strong>${r.barber}</strong></p>
+                <p class="text-sm text-stone-600">Servizio: <strong>${r.service_name}</strong> (${r.price.toFixed(0)} €)</p>
+              </div>
+              <div class="mt-5 pt-4 border-t border-stone-100 flex justify-end">
+                <button onclick="openCancelModal('${r.datetime_str}', '${r.barber}', ${r.service_id}, '${encodeURIComponent(r.service_name)}', '${r.date}', '${r.time}', ${r.price})" class="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition">
+                  Annulla Prenotazione
+                </button>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // Pending
+        const pending = data.pending || [];
+        const pendingSec = document.getElementById('pending-section');
+        const pendingList = document.getElementById('pending-list');
+        const pendingBadge = document.getElementById('pending-badge');
+
+        if (pending.length > 0) {
+          pendingSec.classList.remove('hidden');
+          pendingBadge.textContent = pending.length;
+          pendingList.innerHTML = pending.map(p => `
+            <div class="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm">
+              <div class="flex items-center justify-between mb-2">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">In Coda</span>
+                <span class="text-xs text-stone-400">${p.date}</span>
+              </div>
+              <p class="text-sm font-bold text-stone-800">${p.barber}</p>
+              <p class="text-xs text-stone-500">${p.service_name}</p>
+            </div>
+          `).join('');
+        } else {
+          pendingSec.classList.add('hidden');
+        }
+
+      } catch (err) {
+        console.error("Error loading reservations:", err);
+      }
+    }
+
+    // --- SLOTS SEARCH ---
+    function toggleCustomDates() {
+      const preset = document.getElementById('slots-preset').value;
+      const customRow = document.getElementById('custom-dates-row');
+      if (preset === 'custom') {
+        customRow.classList.remove('hidden');
+      } else {
+        customRow.classList.add('hidden');
+      }
+    }
+
+    async function searchSlots() {
+      const barber = document.getElementById('slots-barber').value;
+      const serviceId = document.getElementById('slots-service').value;
+      const preset = document.getElementById('slots-preset').value;
+      const timeFilter = document.getElementById('slots-time-filter').value;
+      const startDate = document.getElementById('slots-start-date').value;
+      const endDate = document.getElementById('slots-end-date').value;
+
+      const resultsDiv = document.getElementById('slots-results');
+      const loadingDiv = document.getElementById('slots-loading');
+
+      resultsDiv.innerHTML = '';
+      loadingDiv.classList.remove('hidden');
+
+      try {
+        let url = `/api/slots?barber=${encodeURIComponent(barber)}&service_id=${serviceId}&date_preset=${preset}`;
+        if (timeFilter) url += `&time_preset=${timeFilter}`;
+        if (preset === 'custom') {
+          if (startDate) url += `&start_date=${startDate}`;
+          if (endDate) url += `&end_date=${endDate}`;
+        }
+
+        const res = await fetch(url);
+        const slots = await res.json();
+        loadingDiv.classList.add('hidden');
+
+        if (!slots || slots.length === 0) {
+          resultsDiv.innerHTML = `
+            <div class="py-12 text-center bg-white rounded-2xl border border-stone-200 text-stone-500 text-sm">
+              <p class="text-base font-semibold text-stone-700 mb-1">Nessuno slot disponibile</p>
+              <p class="text-xs text-stone-400">Non ci sono orari liberi che soddisfano i filtri selezionati.</p>
+            </div>
+          `;
+          return;
+        }
+
+        // Group by day
+        const grouped = {};
+        slots.forEach(s => {
+          if (!grouped[s.date]) grouped[s.date] = [];
+          grouped[s.date].push(s);
+        });
+
+        let html = '';
+        for (const [dateKey, daySlots] of Object.entries(grouped)) {
+          const first = daySlots[0];
+          html += `
+            <div class="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm">
+              <div class="flex items-center justify-between pb-3 mb-4 border-b border-stone-100">
+                <div class="flex items-center gap-2">
+                  <span class="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-sm">📅</span>
+                  <div>
+                    <h3 class="font-bold text-stone-900">${first.day_name} ${first.date_formatted}</h3>
+                    <p class="text-xs text-stone-400">${daySlots.length} slot liberi disponibili</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                ${daySlots.map(s => `
+                  <button onclick="openBookModal('${s.datetime_str}', '${s.date_formatted}', '${s.time}', '${s.barber}', ${s.service_id}, '${encodeURIComponent(s.service_name)}')" class="p-3 bg-stone-50 hover:bg-amber-50 hover:border-amber-300 border border-stone-200 rounded-xl transition text-center group">
+                    <span class="block text-base font-bold text-stone-800 group-hover:text-amber-800">${s.time}</span>
+                    <span class="block text-[11px] text-stone-400 group-hover:text-amber-700">${s.duration} min</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        resultsDiv.innerHTML = html;
+
+      } catch (err) {
+        loadingDiv.classList.add('hidden');
+        resultsDiv.innerHTML = `<div class="p-4 bg-rose-50 text-rose-700 rounded-xl text-sm">Errore nel caricamento: ${err.message}</div>`;
+      }
+    }
+
+    // --- BOOKING MODAL ---
+    function openBookModal(datetimeStr, dateFmt, time, barber, serviceId, serviceNameEnc) {
+      const serviceName = decodeURIComponent(serviceNameEnc);
+      const serviceObj = appState.services.find(s => s.id === serviceId);
+      const price = serviceObj ? `${serviceObj.price.toFixed(0)} €` : '-';
+
+      appState.selectedSlotForBooking = { datetimeStr, dateFmt, time, barber, serviceId, serviceName };
+
+      document.getElementById('modal-datetime').textContent = `${dateFmt} alle ${time}`;
+      document.getElementById('modal-barber').textContent = barber;
+      document.getElementById('modal-service').textContent = serviceName;
+      document.getElementById('modal-price').textContent = price;
+
+      document.getElementById('book-modal').classList.remove('hidden');
+    }
+
+    function closeBookModal() {
+      document.getElementById('book-modal').classList.add('hidden');
+      appState.selectedSlotForBooking = null;
+    }
+
+    async function executeBooking() {
+      if (!appState.selectedSlotForBooking) return;
+      const btn = document.getElementById('btn-confirm-booking');
+      btn.disabled = true;
+      btn.textContent = 'Invio richiesta...';
+
+      try {
+        const res = await fetch('/api/book', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            datetime_str: appState.selectedSlotForBooking.datetimeStr,
+            service_id: appState.selectedSlotForBooking.serviceId,
+            barber: appState.selectedSlotForBooking.barber
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Errore durante la prenotazione");
+
+        showAlert(`🎉 <strong>Prenotazione effettuata con successo!</strong> Riceverai la conferma su Telegram.`, 'success');
+        closeBookModal();
+        await loadReservations();
+        switchTab('tab-reservations');
+
+      } catch (err) {
+        alert("Errore prenotazione: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Conferma & Prenota';
+      }
+    }
+
+    // --- CANCELLATION MODAL ---
+    function openCancelModal(datetimeStr, barber, serviceId, serviceNameEnc, dateFmt, time, price) {
+      const serviceName = decodeURIComponent(serviceNameEnc);
+      appState.selectedReservationForCancel = { datetimeStr, barber, serviceId, price };
+
+      document.getElementById('cancel-details').innerHTML = `
+        <div class="space-y-1">
+          <p class="font-bold text-stone-900">${dateFmt} ore ${time}</p>
+          <p class="text-stone-600">Barbiere: ${barber}</p>
+          <p class="text-stone-600">Servizio: ${serviceName}</p>
+        </div>
+      `;
+      document.getElementById('cancel-modal').classList.remove('hidden');
+    }
+
+    function closeCancelModal() {
+      document.getElementById('cancel-modal').classList.add('hidden');
+      appState.selectedReservationForCancel = null;
+    }
+
+    async function executeCancellation() {
+      if (!appState.selectedReservationForCancel) return;
+      const btn = document.getElementById('btn-confirm-cancel');
+      btn.disabled = true;
+      btn.textContent = 'Cancellazione...';
+
+      try {
+        const res = await fetch('/api/reservations', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(appState.selectedReservationForCancel)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Errore durante la cancellazione");
+
+        showAlert("Prenotazione annullata con successo.", 'info');
+        closeCancelModal();
+        await loadReservations();
+
+      } catch (err) {
+        alert("Errore cancellazione: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sì, Cancella';
+      }
+    }
+
+    // --- AUTO-BOOKING SCHEDULER ---
+    async function pollSchedulerStatus() {
+      try {
+        const res = await fetch('/api/scheduler/status');
+        const data = await res.json();
+
+        const isRunning = data.status === 'running';
+        const pulse = document.getElementById('scheduler-pulse');
+        const statusPill = document.getElementById('sched-status-pill');
+        const btnToggle = document.getElementById('btn-toggle-scheduler');
+
+        if (isRunning) {
+          pulse.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+          statusPill.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800';
+          statusPill.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> IN ESECUZIONE';
+          btnToggle.className = 'w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-sm';
+          btnToggle.innerHTML = '🛑 Arresta Monitoraggio';
+        } else {
+          pulse.className = 'w-2 h-2 rounded-full bg-stone-400';
+          statusPill.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-stone-100 text-stone-600';
+          statusPill.innerHTML = '<span class="w-2 h-2 rounded-full bg-stone-400"></span> INATTIVO';
+          btnToggle.className = 'w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-sm';
+          btnToggle.innerHTML = '🚀 Avvia Monitoraggio';
+        }
+
+        document.getElementById('sched-checks-pill').textContent = `${data.checks_count} controlli`;
+        document.getElementById('sched-last-check').textContent = data.last_check || 'Mai';
+        document.getElementById('sched-next-check').textContent = data.next_check || '-';
+
+        // Render logs
+        const logContainer = document.getElementById('sched-log-container');
+        if (data.logs && data.logs.length > 0) {
+          logContainer.innerHTML = data.logs.slice().reverse().map(l => {
+            let color = 'text-stone-600';
+            if (l.level === 'success') color = 'text-emerald-700 font-bold';
+            if (l.level === 'warning') color = 'text-amber-700';
+            if (l.level === 'error') color = 'text-rose-700 font-bold';
+            return `<div class="${color}"><span class="text-stone-400">[${l.timestamp.split(' ')[1]}]</span> ${l.message}</div>`;
+          }).join('');
+        }
+
+        // If completed booking via scheduler
+        if (data.status === 'success' && data.found_slot) {
+          showAlert(`🎉 <strong>Bot completato!</strong> Trovato e gestito slot per ${data.found_slot.date} alle ${data.found_slot.time}`, 'success');
+        }
+
+      } catch (err) {
+        console.error("Error polling scheduler:", err);
+      }
+    }
+
+    async function toggleScheduler() {
+      const btn = document.getElementById('btn-toggle-scheduler');
+      const isRunning = btn.textContent.includes('Arresta');
+
+      if (isRunning) {
+        // Stop
+        try {
+          const res = await fetch('/api/scheduler/stop', { method: 'POST' });
+          if (!res.ok) throw new Error("Errore nell'arresto del monitor");
+          showAlert("Monitor di auto-booking arrestato.", 'info');
+          await pollSchedulerStatus();
+        } catch (err) {
+          alert(err.message);
+        }
+      } else {
+        // Start
+        const barber = document.getElementById('sched-barber').value;
+        const serviceId = parseInt(document.getElementById('sched-service').value);
+        const minH = document.getElementById('sched-min-hour').value ? parseInt(document.getElementById('sched-min-hour').value) : null;
+        const maxH = document.getElementById('sched-max-hour').value ? parseInt(document.getElementById('sched-max-hour').value) : null;
+        const interval = parseInt(document.getElementById('sched-interval').value);
+        const startD = document.getElementById('sched-start-date').value || null;
+        const endD = document.getElementById('sched-end-date').value || null;
+        const dryRun = document.getElementById('sched-dry-run').checked;
+
+        try {
+          const res = await fetch('/api/scheduler/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              barber: barber,
+              service_id: serviceId,
+              interval_minutes: interval,
+              min_hour: minH,
+              max_hour: maxH,
+              start_date: startD,
+              end_date: endD,
+              dry_run: dryRun
+            })
+          });
+
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || "Errore nell'avvio");
+
+          showAlert("🚀 Monitor avviato! Controllerà gli slot in background.", 'success');
+          await pollSchedulerStatus();
+        } catch (err) {
+          alert(err.message);
+        }
+      }
+    }
+  </script>
+</body>
+</html>

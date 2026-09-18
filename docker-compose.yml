@@ -1,0 +1,12 @@
+services:
+  barber-app:
+    build: .
+    container_name: barber-app
+    ports:
+      - "7525:7525"
+    volumes:
+      # Persistent volume mapping: edit code on host without needing to rebuild Docker image
+      - ./:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped

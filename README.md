@@ -52,7 +52,7 @@ PREFERRED_SERVICE_ID = 10       # ID servizio preferito
 python barberapp_client.py
 ```
 
-### Comandi
+### Comandi CLI
 
 | Tasto | Azione |
 |-------|--------|
@@ -61,6 +61,28 @@ python barberapp_client.py
 | `c` | ❌ Cancella prenotazione |
 | `r` | 🔄 Aggiorna dati |
 | `q` | 🚪 Esci |
+
+## Interfaccia Web & Docker (Porta 7525)
+
+È disponibile una web interface completa (FastAPI + SPA moderna a tema chiaro):
+- **Consultazione slot** con filtri orari e prenotazione con un click
+- **Gestione prenotazioni** attive e cancellazione con conferma
+- **Auto-Booking Bot**: monitoraggio automatico in background con notifica Telegram e prenotazione immediata del primo slot utile nella fascia oraria scelta.
+
+### Avvio con Docker (Home Server)
+
+Grazie al volume persistente `./:/app`, qualsiasi modifica ai file Python o configurazioni sul server ha effetto immediato senza dover ricostruire l'immagine.
+
+```bash
+docker compose up -d
+```
+L'interfaccia sarà disponibile all'indirizzo `http://<IP_SERVER>:7525`.
+
+### Avvio Locale con uv
+
+```bash
+uv run uvicorn web_server:app --host 0.0.0.0 --port 7525 --reload
+```
 
 ## API Endpoints
 
